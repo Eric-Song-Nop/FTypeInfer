@@ -5,7 +5,6 @@ inductive ty : Type
 | TNat : ty
 | TBool : ty
 | TFun : ty → ty → ty
--- | TPair : ty → ty → ty
 
 #print decidable_eq
 #check decidable
@@ -47,13 +46,6 @@ inductive typed : ctx → exp → ty → Prop
 | Lam_typed (Γ : ctx) (x : string) (e : exp) (aa et A : ty) (p : (ty.TFun aa et) = A) (p2 : typed (ctx.ctx_snoc Γ x aa) e et) : typed Γ (exp.ELam x aa e) A
 | Rec_typed (Γ : ctx) (f: string) (x : string) (aa bb A: ty) (e : exp) (p1 : (ty.TFun aa bb) = A) (p2: typed (ctx.ctx_snoc (ctx.ctx_snoc Γ x aa) f (ty.TFun aa bb)) e bb) : typed Γ (exp.ERec f x aa bb e) A
 | App_typed (Γ : ctx) (e1 e2 : exp) (e2t A : ty) (p1 : typed Γ e2 e2t) (p2 : typed Γ e1 (ty.TFun e2t A)) : typed Γ (exp.EApp e1 e2) A
-
--- | Pair_typed (Γ : ctx) (e1 e2 : exp) (e1t e2t : ty) (p1 : typed Γ e1 e1t) (p2 : typed Γ e2 e2t)
---     : typed Γ (exp.EPair e1 e2) (ty.TPair e1t e2t)
--- | Fst_typed (Γ : ctx) (e : exp) (tl tr: ty) (p : typed Γ e (ty.TPair tl tr))
---     : typed Γ (exp.EFst e) (ty.TFun (ty.TPair tl tr) tl)
--- | Snd_typed (Γ : ctx) (e : exp) (tl tr: ty) (p : typed Γ e (ty.TPair tl tr))
---     : typed Γ (exp.ESnd e) (ty.TFun (ty.TPair tl tr) tr)
 
 -- Exercise 2
 constants (Γ : ctx)
@@ -259,7 +251,6 @@ def type_infer : ctx → exp → option ty
   | none    := none
   end
 | Γ (exp.ERec f x A B e)  :=
-  -- some (ty.TFun A B)
   match type_infer (ctx.ctx_snoc (ctx.ctx_snoc Γ x A) f (ty.TFun A B)) e with
   | some C := if B = C then some (ty.TFun A B) else none
   | _ := none
@@ -269,22 +260,6 @@ def type_infer : ctx → exp → option ty
   | some (ty.TFun A B), some C := if A = C then some B else none
     | _, _                 := none
   end
-
--- | Γ (exp.EPair e1 e2) :=
---   match type_infer Γ e1, type_infer Γ e2 with
---   | some A, some B := some (ty.TPair A B)
---   | _, _ := none
---   end
--- | Γ (exp.EFst e) :=
---   match type_infer Γ e with
---   | some (ty.TPair tl tr) := some (ty.TFun (ty.TPair tl tr) tl)
---   | _ := none
---   end
--- | Γ (exp.ESnd e) :=
---   match type_infer Γ e with
---   | some (ty.TPair tl tr) := some (ty.TFun (ty.TPair tl tr) tr)
---   | _ := none
---   end
 
 lemma type_infer_complete (Γ : ctx) (e : exp) (A : ty) : typed Γ e A → type_infer Γ e = option.some A :=
 begin
