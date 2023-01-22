@@ -29,6 +29,7 @@ inductive ctx : Type
 | ctx_nil : ctx
 | ctx_snoc (Γ : ctx) (x : string) (A : ty) : ctx
 
+-- Exercise 1
 -- operation to lookup the type of a variable in a typing context:
 def ctx_lookup (x : string) : ctx → option ty
 | ctx.ctx_nil          := option.none
@@ -95,6 +96,7 @@ lemma test_everything : typed Γ
     refl,
   end
 
+-- Exercise 4
 -- def f(x : Nat) : Nat → Bool:
 --   return lambda y : Nat:
 --     if x == 0:
@@ -228,6 +230,7 @@ begin
   },
 end
 
+-- Exercise 4
 def type_infer : ctx → exp → option ty
 | Γ (exp.EVar x)           := ctx_lookup x Γ
 | Γ exp.ETrue              := some ty.TBool
@@ -261,6 +264,10 @@ def type_infer : ctx → exp → option ty
     | _, _                 := none
   end
 
+-- Exercise 5
+-- TODO: Not Implemented Yet
+
+-- Exercise 6
 lemma type_infer_complete (Γ : ctx) (e : exp) (A : ty) : typed Γ e A → type_infer Γ e = option.some A :=
 begin
   intro h,
