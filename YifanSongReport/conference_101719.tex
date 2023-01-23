@@ -1,0 +1,286 @@
+\documentclass[conference]{IEEEtran}
+\IEEEoverridecommandlockouts
+% The preceding line is only needed to identify funding in the first footnote. If that is unneeded, please comment it out.
+\usepackage{cite}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{algorithmic}
+\usepackage{algorithm}
+\usepackage{proof}
+\usepackage{listings}
+\lstset{
+    numbers=left,numberstyle=\tiny,numbersep=0pt
+    }
+
+\usepackage{graphicx}
+\usepackage{textcomp}
+\usepackage{enumitem}
+\usepackage{xcolor}
+\usepackage{hyperref}
+\usepackage[english]{babel} % To obtain English text with the blindtext package
+\usepackage{blindtext}
+\def\BibTeX{{\rm B\kern-.05em{\sc i\kern-.025em b}\kern-.08em
+    T\kern-.1667em\lower.7ex\hbox{E}\kern-.125emX}}
+
+
+\begin{document}
+
+\title{A Formal Type Inferencer for System-F in Lean}
+\author{
+	\IEEEauthorblockN{Yifan Song}
+	\IEEEauthorblockA{
+		\textit{Delft University of Technology}\\
+		Delft, Netherlands \\
+		Y.Song-31@student.tudelft.nl}
+}
+
+\maketitle
+
+\begin{abstract}
+
+\end{abstract}
+%%%%%%%%%%%%%%%%%%%%%%%%%% Introduction %%%%%%%%%%%%%%%%%%%%%%%%%%
+\section{Introduction}
+A type system is a common tool for verifying the correctness of a program.
+
+\section{STLC with Recursive Function}
+\subsection{Definition of Abstract Syntax, Type and Context}
+The syntax, type, and context of simple typed lambda calculus(STLC) with recursive function are defined
+the same as in the project description. The only difference is the added $@[derive\ decidable\_eq]$
+notation. This is to tell lean that the comparison of whether two types are equal is decidable.
+So it is essential for the type checker to be a decidable algorithm.
+
+\subsection{Type Relations for STLC}
+Before implementing and formalizing the type inferencer for STLC,
+we need to implement the type relations for STLC so that we can
+type annotate an expression and judge the type inferencer afterward.
+
+The type relations for literal terms are straightforward, taking
+expression ETrue as an example:
+\begin{equation}
+	\infer{\vdash ETrue:TBool}{}
+	\label{eq:TITrue}
+\end{equation}
+In the corresponding lean code, this is represented as
+`$True\_typed\ {\Gamma : ctx} : typed\ \Gamma\ exp.ETrue\ ty.TBool$`
+This is basically the same for $IsZero$, $Pred$ and $Succ$:
+\begin{equation}
+	\infer{\vdash EIsZero:TFun(TNat, TBool)}{}
+	\label{eq:TIIsZero}
+\end{equation}
+\begin{equation}
+	\infer{\vdash EPred:TFun(TNat, TNat)}{}
+	\label{eq:TIPred}
+\end{equation}
+
+\begin{equation}
+	\infer{\Gamma\vdash EVar(x):T}{x:T\in \Gamma}
+	\label{eq:TIVar}
+\end{equation}
+For the $Var$ expression, we need to check its type in the given environment,
+then get the type of this expression.
+
+\begin{equation}
+	\infer{\Gamma\vdash EApp(e1, e2):T_{12}}
+	{\Gamma\vdash e1:TFun(T1, T12) & \Gamma\vdash e2:T1}
+	\label{eq:TIApp}
+\end{equation}
+Here we need to introduce the type of the two sub-expressions for
+the application expression. We can and only can get the type
+when the first expression has a function type while the second expression
+has the type of the first parameter of that function.
+
+\begin{equation}
+	\infer{\Gamma\vdash EIf(t, thn, els):T}
+	{\Gamma\vdash t:TBool & \Gamma\vdash thn:T & \Gamma\vdash els:T}
+	\label{eq:TIIf}
+\end{equation}
+For if then else branches expression, we need to ensure the test expression has type bool,
+while both branches share the same type as the whole expression.
+
+The above cases all do not include changing the context, while type
+relations for $Lam$ and $Rec$, which both define a new function and
+introduce local variables, and add elements to the context.
+
+\begin{equation}
+	\infer{\Gamma\vdash EAbs(x:T1, b):TFun(T1, T2)}
+	{\Gamma,x:T1\vdash b:T2}
+	\label{eq:TIAbs}
+\end{equation}
+\begin{equation}
+	\infer{\Gamma\vdash ERec(f, x:T1, T2, b):TFun(T1, T2)}
+	{\Gamma,x:T1,f:TFun(T1,T2)\vdash b:T2}
+	\label{eq:TIRec}
+\end{equation}
+
+The type relation for $Rec$ is basically an extension of the $Lam$.
+It needs to check the declared return type is the same as the type of
+body with the parameter and the function itself with their types are added to the context.
+
+\begin{lstlisting}
+    | RecTyped (G : ctx) (f: string) 
+        (x : string) (aa bb A: ty) 
+        (e : exp) 
+        (p1 : (ty.TFun aa bb) = A) 
+        (p2: typed (ctx.ctx_snoc 
+            (ctx.ctx_snoc G x aa) 
+            f (ty.TFun aa bb)) e bb) 
+        : typed G (exp.ERec f x aa bb e) A
+\end{lstlisting}
+
+Here is a code snippet for the type relation for recursive functions.
+A type $A$ is introduced for all rules to represent the final type of
+the expression for all cases as shown in line $2$,
+because it surprisingly simplifies the
+proof of the completeness of the type inference algorithm to only a $simp$
+term for all cases there.
+
+\subsection{Some STLC with Recursive Examples}
+This section is for the exercise $3$ in the project.
+Here we define a function that checks if two natural numbers are equal in STLC.
+
+\begin{lstlisting}
+rec f(x : Nat) : Nat ->  Bool:
+  return lambda y : Nat:
+    if x == 0:
+      if y == 0:
+        return true
+      else:
+        return false
+    else:
+      if y == 0:
+        return false
+      else:
+        return (f(x - 1))(y - 1)
+\end{lstlisting}
+Because the language we defined only supports lambda with one parameter,
+to compare two natural numbers, we need the outer function to get a nat
+and return a function from nat to bool.
+
+In the inner function, we subtract both numbers by one and check if they
+reach zero at the same time.
+
+The proof of: $\infer{\vdash f:TFun(TNat, TFun(TNat,TBool))}{}$, is just
+a lot of $apply\ typed\_sth$ and $refl$. These $refl$s come because of
+those type $A$s introduced in $typed$.
+
+\subsection{Type Inferencer for STLC with Recursive Function}
+The $typed$ inductive predicate defines in a certain context,
+what it requires for an expression to have a certain type, while it does not give
+an algorithm for checking whether the expression is typed or inferring its type.
+
+Although the $typed$ type relation is not the type inferencer itself,
+it gives a syntactic directed type relation and
+is similar to the type inference algorithm,
+which means we can use a recursive function on all types of expressions
+to give an inferencer for STLC similar to the type relation rules.
+Take expression $ETrue$ as an example:
+
+\begin{lstlisting}
+def type_infer : ctx -> exp -> option ty
+| G exp.ETrue := some ty.TBool
+\end{lstlisting}
+Here a type of TBool is always returned when encountering a $True$
+expression.
+
+The type inferencer takes a context and an expression as input and an
+optional type as output. When the expression fails the type check in
+the context, a $none$ will be returned. In a real-world type inferencer,
+we might want to use $Pair(info, Option\ ty)$ as the return type to also
+maintain the error information.
+
+The type checker really does something when it comes to some more complex
+expressions:
+
+\begin{lstlisting}
+def type_infer : ctx -> exp -> option ty
+| G (exp.EIf e1 e2 e3)     :=
+  match type_infer G e1 with
+  | some ty.TBool :=
+    match type_infer G e2, 
+    type_infer G e3 with
+    | some tA, some tB := 
+        if tA = tB then (some tA) 
+        else none
+    | _, _            := none
+    end
+  | _ := none
+  end
+\end{lstlisting}
+When it comes to cases like the $if$ expression, we need to recursively check if the
+condition expression is giving a bool type and if both branches give the same
+reasonable types. The checking of the equality of the type of the two
+branches shows the importance of the attribute of $@[derive decidable\_eq]$
+for $type$ type. Without that attribute, this whole function is no longer
+decidable and therefore illegal as a lean function.
+
+\subsection{Completeness of the STLC Type Inferencer}
+The completeness of the type inferencer means that for any correct expression
+in this context, the type inferencer can infer the correct type. Since
+the inductive predicate $typed$ is the typing rules definition in lean,
+the completeness of the type inferencer is:
+\begin{equation}
+	\forall \Gamma\forall e\forall A.typed\ \Gamma\ e\ A \to type\_infer\ \Gamma \ e = some\ A
+	\label{eq:cmp}
+\end{equation}
+
+Since the type inference algorithm is fully based on the typing rules and
+the propositions given by $typed$ mostly contains everything inference need,
+the proof of completeness is straightforward by first introducing the $typed$
+side then do induction on $typed$. For each type of expression, the proof
+of completeness is mostly $simp$ by definition of $type\_infer$ and other
+assumptions.
+
+\subsection{Soundness of the STLC Type Inferencer}
+As the reverse of completeness,
+the soundness of the type inferencer means that all inferred type and
+expressions in the context, you can prove its correctness with the type
+relation rules. The soundness of the type inferencer is:
+
+\begin{equation}
+	\forall \Gamma\forall e\forall A. type\_infer\ \Gamma \ e = some\ A \to typed\ \Gamma\ e\ A
+	\label{eq:snd}
+\end{equation}
+
+The proof of soundness is much harder than the proof of completeness.
+The first steps are straightforward, we introduce variables and hypothesis,
+then do induction on the expression and the $type\_infer$ algorithm.
+
+When it comes to cases like $Lam(x:T, b)$, after simplify the hypothesis on
+$type\_infer$ with its definition, we first need to remember the type of
+the variable in the context using : $generalize\ h:x:T\in\Gamma=G$,
+and also the inference of subexpression: $generalize\ ht:type\_infer\ G\ e=TO$.
+\cite{pierce2010software}
+Otherwise, if we directly do induction on $type\_infer\ G\ e$, we might lose
+some important type information for the last few steps that prevent lean from
+deciding the metavariables for types.
+
+Here, the lean tactic $finish$ can be used, as there are a lot of cases where we just induction on the expression and discard all impossible cases using $by\_contradiction$ proof. However, I am not using them because it truly requires a lot f CPU resources. Since I prove them step by step, the proof becomes much longer.
+
+\section{System F}
+\subsection{Definition of Abstract Syntax, Type and Context}
+For the extension part, I extended the previous part into the polymorphism of system F. Two new types $TVar$ for type variables and $\forall$ all type are added:
+
+\begin{equation} \label{FTy}
+	\begin{split}
+		ty & = X \\
+		& = \forall X.ty
+	\end{split}
+\end{equation}
+
+here $X$ is a type variable with name $x$, and $\forall X.ty$ is the means for all type X,ty.
+
+Two new expressions are added also:
+
+\begin{equation} \label{FExp}
+	\begin{split}
+		exp & = \lambda X.exp \\
+		& = exp[T]
+	\end{split}
+\end{equation}
+
+which means type abstraction to construct $forall$ type and fix $forall$ type to type $T$.
+
+\bibliographystyle{IEEEtran}
+\bibliography{references}{}
+
+\end{document}

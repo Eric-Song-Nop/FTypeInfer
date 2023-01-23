@@ -298,9 +298,8 @@ end
 lemma type_infer_sound: ∀Γ e A, type_infer Γ e = option.some A → typed Γ e A :=
 begin
   intros Γ e,
-  revert Γ,
   induction' e;
-  intros Γ T h;
+  intros T h;
   cases' h,
 
   {
