@@ -40,7 +40,15 @@
 \end{abstract}
 %%%%%%%%%%%%%%%%%%%%%%%%%% Introduction %%%%%%%%%%%%%%%%%%%%%%%%%%
 \section{Introduction}
-A type system is a common tool for verifying the correctness of a program.
+A type system is a common tool for verifying the correctness of a program, while polymorphism is a common way
+for both making the type system stronger and enabling us to write cleaner codes. as the type system becomes more
+complicated, we would want to have a type inferencer so that we need not write all type annotations explicitly.
+There are some common polymorphism ways like let polymorphism and system F. In this project, we consider system F
+which is also the foundation of the type system of Haskell and OCaml. A type inferencer for a strong system F might
+not be decidable, but with type annotation, we can give an inferencer for a weak system F.
+
+In this project, a formalization of type checker for a simple type lambda calculus is given. Based on that
+system F is also implemented with a formalized type inferencer.
 
 \section{STLC with Recursive Function}
 \subsection{Definition of Abstract Syntax, Type and Context}
@@ -280,7 +288,190 @@ Two new expressions are added also:
 
 which means type abstraction to construct $forall$ type and fix $forall$ type to type $T$.
 
+Here we need to find a good way to represent the type variables. And there are some
+common way for this\cite{pierce2002types}
+
+\begin{enumerate}
+	\item Naming all type variables the same as we do for a variable in expression.
+	\item Naming all type variables with a unique name.
+	\item Fully redesign the language with combinators without any variables.
+	\item Using a representation without symbolic names.
+\end{enumerate}
+
+Because of the type application expression, we will introduce a type substitude for
+variables, which makes the first two choices bad because it would be hard to implement
+a renaming and substitude mechanism for them. Even if all variables are assigned
+a different name, they are still not substitute stable.
+Thus we choose the third approach with
+de Bruijn index which use the index of the variable in the expression to represent it.
+
+To keep it consistent, we use de Bruijn index for both type variables and term variables,
+thus the type becomes:
+
+\begin{equation} \label{FTyI}
+	\begin{split}
+		ty & = I : N \\
+		& = \forall .ty
+	\end{split}
+\end{equation}
+
+\begin{equation} \label{FExpI}
+	\begin{split}
+		exp & = i : N\ Var \\
+	\end{split}
+\end{equation}
+
+Then we define a type binder:
+
+\begin{equation} \label{FBinder}
+	\begin{split}
+		binder & = Var(ty)\\
+		& = Type
+	\end{split}
+\end{equation}
+
+`@[derive decidable\_eq]` is also added to type binder to check equality for it.
+Then the context becomes just a list of binders. When a new type variable is added
+to the context, we simply append a type binder into the context with no real information,
+when a term variable is added to the context, we append its corresponding type to
+the context.
+
+Since all variables become a natural number, we can look up the variable in the context
+with $love$ provided $list.nth$ to get an option binder and destruct to get the type.
+
+\subsection{Substitution and Typing Rules for System-F}
+Here we need to add typing rules for the two newly added expressions type abstraction
+and type application.
+
+\begin{equation}
+	\infer{\Gamma\vdash \lambda X.t_2:\forall X.T_2}
+	{\Gamma,X\vdash t_2:T_2}
+	\label{eq:TITAbs}
+\end{equation}
+
+The implementation of typing rules for type abstraction is trivial,
+we add a new type binder to the context and the type of body
+with a forall is its type.
+
+\begin{lstlisting}
+| TAbs_typed {G : list bi} (e: exp) (A T: ty) 
+(p1: typed (add_bi G bi.TarBind) e A) 
+(p2: T = ty.TForAll A): typed G (exp.ETAbs e) T
+\end{lstlisting}
+
+For type application, we have the typing rule:
+\begin{equation}
+	\infer{\Gamma\vdash \lambda X.t_2:\forall X.T_2}
+	{\Gamma\vdash t_1[T_2]:[X\to T_2]T_{12}}
+	\label{eq:TITApp}
+\end{equation}
+this introduces a type substitution that we need to
+substitute $X$ with $T_2$ in $T_{12}$.
+
+To define a substitute, we first need an auxiliary function
+shift so that we can renumber the index of a free variable.
+When things like $[0\to S]\lambda.1$ happens, free variables
+inside $S$ should be shifted by $1$.
+\begin{lstlisting}
+def typeShiftAbove : ty -> N -> N -> ty
+| (ty.TVar x) d cc:= if x >= cc then
+ty.TVar (x + d) else ty.TVar(x)
+| (ty.TFun t1 t2) d cc:= ty.TFun
+(typeShiftAbove t1 d cc) (typeShiftAbove t2 d cc)
+| (ty.TForAll t) d cc:= 
+ty.TForAll (typeShiftAbove t d (cc + 1))
+\end{lstlisting}
+Here $d$ means how much we need to shift the variable and
+$cc$ is a cutoff that controls which variables
+should be shifted.
+
+Shift function should also support negative shift, which is
+decrease, since we do not have access to negative integers
+in Lean, we define a typeShiftBelow to do the negative shift.
+For most cases, we consider cutoff to be 0, so we define tsa
+and tsb for $cc$ to be 0.
+
+Thus we can define type substitute with type shift:
+\begin{lstlisting}
+def typeSubst : ty -> ty -> N -> ty
+| (ty.TVar i) tyS c := 
+if i = c then tsa c tyS else (ty.TVar i)
+| (ty.TFun t1 t2) tyS c := 
+ty.TFun (typeSubst t1 tyS c) (typeSubst t2 tyS c)
+| (ty.TForAll t) tyS c := 
+ty.TForAll(typeSubst t tyS (c + 1))
+| tyT _ _ := tyT
+
+\end{lstlisting}
+Consider $[X\to S]T$, here the first parameter is the $X$,
+the second is the $S$, $c$ is still the cutoff.
+
+For the case that we have in type application, we first type shift
+it by 1, then type substitute, the decrease it by 1, which is:
+\begin{lstlisting}
+def typeSubstTop (tyS tyT : ty): ty :=
+  tsb 1 (typeSubst tyT (tsa 1 tyS) 0)
+\end{lstlisting}
+
+Then we can define the typing rule for it:
+\begin{lstlisting}
+| TApp_typed {G : list bi} (tt1 : exp) 
+(TT2 A : ty) {TT12 : ty} 
+(p1 : typed G tt1 (ty.TForAll TT12)) 
+(p2 : typeSubstTop TT2 TT12 = A) : 
+typed G (exp.ETApp tt1 TT2) A
+\end{lstlisting}
+
+\subsection{Type Inference for System F}
+The type infer function becomes simple after we
+have solid typing rules and enough auxiliary function
+for type substitute. We only need to extend it for the
+two newly added expression type abstraction and type
+application:
+
+\begin{lstlisting}
+| G (exp.ETAbs e) :=
+  match 
+  type_infer (add_bi G (bi.TarBind)) e 
+  with
+  | some C := some (ty.TForAll C)
+  | _ := none
+  end
+| G (exp.ETApp e t) :=
+  match type_infer G e with
+  | some ty1 := match ty1 with
+    | ty.TForAll ttt := 
+        some (typeSubstTop t ttt)
+    | _ := none
+    end
+  | _ := none
+  end
+
+\end{lstlisting}
+
+The proof of completeness is still simple even
+for them. For case type abstraction, a chain of
+simps are enough, for case type application, a
+chain of simps with a finish is enough.
+
+The proof of soundness is similar to the previous ones.
+
+The case type abstraction is very similar to lambda.
+The case type application is a little bit more complicated, but
+some finishes are used to make it a really short proof, but
+still similar to the case of lambda.
+
+\section{Conclusion and Personal Thoughts}
+In this project, type judgment and inference for both simple type lambda calculus and system F are implemented.
+Most features in lean are pretty handy, auto deriving for equal, finish and other features are really useful.
+And I am happy that most functions I write in other functional programming languages can be rewritten in lean so
+easily. For example, I wrote the type inference first in Fsharp, and I change only a little for it to work in lean.
+
+It is just sometimes I hope Lean can consider $A=B$ as $B=A$ as same thing. For now, If I have $h1:B=A,h2:C$ when I need to use $B$ to substitute all $A$ in $C$, I might to first get $h3:A=B$ and use $rw$ after that.
+
+In short, Lean is strong enough for me, and this simple type inferencer, or maybe type checker. I would want to extend this to be a real type inferencer by implementing extension 5 or some subtyping.
 \bibliographystyle{IEEEtran}
 \bibliography{references}{}
+
 
 \end{document}
