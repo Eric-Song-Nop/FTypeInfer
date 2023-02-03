@@ -98,7 +98,7 @@ inductive typed : list bi → exp → ty → Prop
 | App_typed (Γ : list bi) (e1 e2 : exp) (e2t A : ty) (p1 : typed Γ e2 e2t) (p2 : typed Γ e1 (ty.TFun e2t A)) : typed Γ (exp.EApp e1 e2) A
 
 | TAbs_typed {Γ : list bi} (e : exp) (A T: ty) (p1 : typed (add_bi Γ bi.TarBind) e A) (p2 : T = ty.TForAll A): typed Γ (exp.ETAbs e) T
-| TApp_typed {Γ : list bi} (tt1 : exp) (TT2 A : ty) {TT12 : ty} (p1 : typed Γ tt1 (ty.TForAll TT12)) (p2 : typeSubstTop TT2 TT12 = A) : typed Γ (exp.ETApp tt1 TT2) A -- TODO: here should not be T,
+| TApp_typed {Γ : list bi} (tt1 : exp) (TT2 A : ty) {TT12 : ty} (p1 : typed Γ tt1 (ty.TForAll TT12)) (p2 : typeSubstTop TT2 TT12 = A) : typed Γ (exp.ETApp tt1 TT2) A
 
 def type_infer : list bi → exp → option ty
 | Γ (exp.EVar x)           := bi_lookup x Γ
@@ -170,7 +170,6 @@ begin
     -- These tow line are extended for ETAbs and ETApp
     simp [type_infer, h_p1, h_p2, h_ih],
     simp [type_infer, h_p1, h_p2, h_ih, typeSubstTop],
-    -- simp [typeSubstTop, typeSubst, tsb, tsa, typeShiftBelow, typeShiftAbove] at h_p3,
     finish,
 end
 

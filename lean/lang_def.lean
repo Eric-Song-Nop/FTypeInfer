@@ -29,7 +29,7 @@ inductive ctx : Type
 | ctx_nil : ctx
 | ctx_snoc (Γ : ctx) (x : string) (A : ty) : ctx
 
--- Exercise 1
+/-# Exercise 1-/
 -- operation to lookup the type of a variable in a typing context:
 def ctx_lookup (x : string) : ctx → option ty
 | ctx.ctx_nil          := option.none
@@ -48,7 +48,7 @@ inductive typed : ctx → exp → ty → Prop
 | Rec_typed (Γ : ctx) (f: string) (x : string) (aa bb A: ty) (e : exp) (p1 : (ty.TFun aa bb) = A) (p2: typed (ctx.ctx_snoc (ctx.ctx_snoc Γ x aa) f (ty.TFun aa bb)) e bb) : typed Γ (exp.ERec f x aa bb e) A
 | App_typed (Γ : ctx) (e1 e2 : exp) (e2t A : ty) (p1 : typed Γ e2 e2t) (p2 : typed Γ e1 (ty.TFun e2t A)) : typed Γ (exp.EApp e1 e2) A
 
--- Exercise 2
+/-! # Exercise 2-/
 constants (Γ : ctx)
 lemma test_id_nat : typed Γ (exp.ELam "x" ty.TNat (exp.EVar "x")) (ty.TFun ty.TNat ty.TNat) :=
   begin
@@ -96,7 +96,7 @@ lemma test_everything : typed Γ
     refl,
   end
 
--- Exercise 4
+/-! # Exercise 4-/
 -- def f(x : Nat) : Nat → Bool:
 --   return lambda y : Nat:
 --     if x == 0:
@@ -264,10 +264,21 @@ def type_infer : ctx → exp → option ty
     | _, _                 := none
   end
 
--- Exercise 5
--- TODO: Not Implemented Yet
+/-! # Exercise 5
+## Explain the difference between the typing judgment typed and the type inferencer type_infer:
+Typing judgment is a definition of the typing of specific expression under certain context and condition.
+The type inference or a type checker is used to infer the type of the expression with maybe not complete
+typing information, and also check if subexpressions are typed correctly.
 
--- Exercise 6
+## Explain why the type annotations A and B in lambda abstractions λ(x : A). e and recursive functions rec f (x : A) : B := e are needed for the implementation of your type inferencer. Explain if they are also needed to describe the typing rules:
+We can consider such an example: λx. x, if we do not know the type of x, it is impossible for us to infer the type of the body expression.
+Similarly for rec, we need the type of the function to be added to the context, so we can use its type information when infering the type of body expression.
+
+For type judgment, they are not required, because you can make assumptions about the type of the parameter and the
+type of the function for rec and add to the context. It's just you need to make the right assumption here.
+-/
+
+/-! # Exercise 6-/
 lemma type_infer_complete (Γ : ctx) (e : exp) (A : ty) : typed Γ e A → type_infer Γ e = option.some A :=
 begin
   intro h,
